@@ -164,6 +164,11 @@ internal static class DetailLineBuilder
         if (card.Type == ECardType.PvpEncounter)
             return EncounterReader.GetPvpEncounterDetailLines(card);
 
+        if (card.Type == ECardType.CombatEncounter)
+        {
+            return EncounterReader.GetCombatEncounterDetailLines(card);
+        }
+
         return BuildDetailLines(card, enemyOrder: false);
     }
 
