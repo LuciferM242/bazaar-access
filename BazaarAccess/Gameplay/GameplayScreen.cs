@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BazaarAccess.Accessibility;
 using BazaarAccess.Core;
 using BazaarAccess.Patches;
+using BazaarAccess.Gameplay.CombatEncounterPreview;
 using BazaarAccess.UI;
 using BazaarGameClient.Domain.Models.Cards;
 using BazaarGameShared.Domain.Core.Types;
@@ -26,6 +27,7 @@ public class GameplayScreen : IAccessibleScreen
     private readonly ActionMenuHandler _actionMenu;
     private readonly CombatInputHandler _combatHandler;
     private readonly ReplayInputHandler _replayHandler;
+    private readonly CombatEncounterPreviewNavigator _combatEncounterPreview;
     private bool _isValid = true;
     private ERunState _lastState = ERunState.Choice;
 
@@ -35,10 +37,17 @@ public class GameplayScreen : IAccessibleScreen
         _actionMenu = new ActionMenuHandler(_navigator, HandleUpgradeConfirm, RefreshAndAnnounce);
         _combatHandler = new CombatInputHandler(_navigator);
         _replayHandler = new ReplayInputHandler(_navigator, TriggerReplayContinue, TriggerReplayReplay, TriggerReplayRecap);
+        _combatEncounterPreview = new CombatEncounterPreviewNavigator();
     }
 
     public void HandleInput(AccessibleKey key)
     {
+        if (_combatEncounterPreview.IsActive)
+        {
+            _combatEncounterPreview.HandleInput(key);
+            return;
+        }
+
         // Handle action mode input (when in action mode)
         if (_actionMenu.IsActive)
         {
@@ -162,6 +171,10 @@ public class GameplayScreen : IAccessibleScreen
 
             case AccessibleKey.GoToEnemy:
                 _navigator.ReadEnemyInfo();
+                break;
+
+            case AccessibleKey.Inspect:
+                HandleInspect();
                 break;
 
             // Navegación dentro de la sección actual
@@ -379,7 +392,7 @@ public class GameplayScreen : IAccessibleScreen
     {
         return "Left/Right: Navigate items. Up/Down: Read details. " +
                "Tab: Switch section. Space: Toggle stash. G: Go to stash. " +
-               "B: Board. V: Hero. C: Choices. F: Enemy. I: Properties. W: Wins. " +
+               "B: Board. V: Hero. C: Choices. F: Enemy. X: Inspect. I: Properties. W: Wins. " +
                "Enter: Select/Buy or Action menu on board items. E: Exit. R: Refresh. " +
                "In Action menu: S sell, U upgrade, M move, Arrows reorder. " +
                "Ctrl+Arrows: Detail reading. Period/Comma: Messages.";
@@ -387,6 +400,7 @@ public class GameplayScreen : IAccessibleScreen
 
     public void OnFocus()
     {
+        _combatEncounterPreview.Exit(announce: false);
         _lastState = StateChangePatch.GetCurrentRunState();
         _navigator.Refresh();
 
@@ -409,6 +423,7 @@ public class GameplayScreen : IAccessibleScreen
     /// <param name="stateActuallyChanged">True si el estado realmente cambió (calculado por StateChangePatch)</param>
     public void OnStateChanged(ERunState newState, bool stateActuallyChanged = true)
     {
+        _combatEncounterPreview.Exit(announce: false);
         _lastState = newState;
 
         // Durante combate, no anunciar nada aquí (OnCombatStateChanged lo hará)
@@ -579,6 +594,22 @@ public class GameplayScreen : IAccessibleScreen
 
         // Skills - solo leer info
         _navigator.ReadDetailedInfo();
+    }
+
+    private void HandleInspect()
+    {
+        var card = _navigator.GetCurrentCard();
+        if (card?.Type != ECardType.CombatEncounter)
+        {
+            TolkWrapper.Speak("Nothing to inspect");
+            return;
+        }
+
+        if (_combatEncounterPreview.TryEnter(card))
+        {
+            Plugin.Instance.StartCoroutine(_combatEncounterPreview.ShowVisualPreview());
+            Plugin.Instance.StartCoroutine(_combatEncounterPreview.MonitorVisualState());
+        }
     }
 
     private void HandleCardConfirm(Card card)
@@ -1133,6 +1164,7 @@ public class GameplayScreen : IAccessibleScreen
     /// </summary>
     public void OnCombatStateChanged(bool inCombat)
     {
+        _combatEncounterPreview.Exit(announce: false);
         _navigator.SetCombatMode(inCombat);
 
         if (inCombat)
@@ -1197,6 +1229,7 @@ public class GameplayScreen : IAccessibleScreen
     /// </summary>
     public void OnReplayStateChanged(bool inReplayState)
     {
+        _combatEncounterPreview.Exit(announce: false);
         _navigator.SetReplayMode(inReplayState);
 
         if (inReplayState)
