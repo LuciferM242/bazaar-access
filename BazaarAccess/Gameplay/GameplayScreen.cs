@@ -6,7 +6,6 @@ using BazaarAccess.Core;
 using BazaarAccess.Patches;
 using BazaarAccess.Gameplay.CombatEncounterPreview;
 using BazaarAccess.Gameplay.ItemInspect;
-using BazaarAccess.UI;
 using BazaarGameClient.Domain.Models.Cards;
 using BazaarGameShared.Domain.Core.Types;
 using BazaarGameShared.Domain.Runs;
@@ -31,6 +30,7 @@ public class GameplayScreen : IAccessibleScreen
     private readonly ReplayInputHandler _replayHandler;
     private readonly CombatEncounterPreviewNavigator _combatEncounterPreview;
     private readonly ItemInspectNavigator _itemInspect;
+    private readonly ShopItemMenuHandler _shopItemMenu;
     private bool _isValid = true;
     private ERunState _lastState = ERunState.Choice;
 
@@ -42,6 +42,7 @@ public class GameplayScreen : IAccessibleScreen
         _replayHandler = new ReplayInputHandler(_navigator, TriggerReplayContinue, TriggerReplayReplay, TriggerReplayRecap, TriggerReplayRecapBack);
         _combatEncounterPreview = new CombatEncounterPreviewNavigator();
         _itemInspect = new ItemInspectNavigator();
+        _shopItemMenu = new ShopItemMenuHandler(BuyShopItem, TryStartItemInspect);
     }
 
     public void HandleInput(AccessibleKey key)
@@ -57,6 +58,12 @@ public class GameplayScreen : IAccessibleScreen
         if (_combatEncounterPreview.IsActive)
         {
             _combatEncounterPreview.HandleInput(key);
+            return;
+        }
+
+        if (_shopItemMenu.IsActive)
+        {
+            _shopItemMenu.HandleInput(key);
             return;
         }
 
@@ -385,7 +392,7 @@ public class GameplayScreen : IAccessibleScreen
         return "Left/Right: Navigate items. Up/Down: Read details. " +
                "Tab: Switch section. Space: Toggle stash. G: Go to stash. " +
                "B: Board. V: Hero. C: Choices. F: Enemy. X: Inspect. I: Properties. W: Wins. " +
-               "Enter: Select/Buy or Action menu on board items. E: Exit. R: Refresh. " +
+               "Enter: Select, or open a menu on shop and board items. E: Exit. R: Refresh. " +
                "In Action menu: S sell, U upgrade, M move, Arrows reorder. " +
                "Ctrl+Arrows: Detail reading. Period/Comma: Messages.";
     }
@@ -394,6 +401,7 @@ public class GameplayScreen : IAccessibleScreen
     {
         _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
+        _shopItemMenu.Exit(announce: false);
         _lastState = StateChangePatch.GetCurrentRunState();
         _navigator.Refresh();
 
@@ -418,6 +426,7 @@ public class GameplayScreen : IAccessibleScreen
     {
         _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
+        _shopItemMenu.Exit(announce: false);
         _lastState = newState;
 
         // Durante combate, no anunciar nada aquí (OnCombatStateChanged lo hará)
@@ -626,7 +635,14 @@ public class GameplayScreen : IAccessibleScreen
         switch (card.Type)
         {
             case ECardType.Item:
-                BuyItem(card);
+                if (_navigator.IsSelectionFree())
+                {
+                    BuyItem(card);
+                }
+                else
+                {
+                    EnterShopItemMenu(card as ItemCard);
+                }
                 break;
 
             case ECardType.Skill:
@@ -652,8 +668,6 @@ public class GameplayScreen : IAccessibleScreen
         var itemCard = card as ItemCard;
         if (itemCard == null) { TolkWrapper.Speak("Not an item"); return; }
 
-        string name = ItemReader.GetCardName(card);
-
         if (_navigator.IsSelectionFree())
         {
             // En Loot/Rewards, los items son gratuitos
@@ -663,14 +677,21 @@ public class GameplayScreen : IAccessibleScreen
         }
         else
         {
-            int price = ItemReader.GetBuyPrice(card);
-            var ui = new ConfirmActionUI(ConfirmActionType.Buy, name, price,
-                onConfirm: () => {
-                    ActionHelper.BuyItem(itemCard);
-                    Plugin.Instance.StartCoroutine(DelayedRefreshAndAnnounce());
-                },
-                onCancel: () => TolkWrapper.Speak("Cancelled"));
-            AccessibilityMgr.ShowUI(ui);
+            BuyShopItem(itemCard);
+        }
+    }
+
+    private void BuyShopItem(ItemCard itemCard)
+    {
+        if (itemCard == null)
+        {
+            TolkWrapper.Speak("Not an item");
+            return;
+        }
+
+        if (ActionHelper.BuyItem(itemCard))
+        {
+            Plugin.Instance.StartCoroutine(DelayedRefreshAndAnnounce());
         }
     }
 
@@ -724,27 +745,15 @@ public class GameplayScreen : IAccessibleScreen
         _navigator.Refresh();
     }
 
-    private void HandleSellConfirm(Card card)
+    private void EnterShopItemMenu(ItemCard itemCard)
     {
-        var itemCard = card as ItemCard;
-        if (itemCard == null) { TolkWrapper.Speak("Cannot sell this"); return; }
-
-        if (!_navigator.CanSellInCurrentState())
+        if (itemCard == null)
         {
-            TolkWrapper.Speak("Cannot sell right now");
+            TolkWrapper.Speak("Not an item");
             return;
         }
 
-        string name = ItemReader.GetCardName(card);
-        int price = ItemReader.GetSellPrice(card);
-
-        var ui = new ConfirmActionUI(ConfirmActionType.Sell, name, price,
-            onConfirm: () => {
-                ActionHelper.SellItem(itemCard);
-                RefreshAndAnnounce();
-            },
-            onCancel: () => TolkWrapper.Speak("Cancelled"));
-        AccessibilityMgr.ShowUI(ui);
+        _shopItemMenu.Enter(itemCard);
     }
 
     private void HandlePedestalAction(Card card)
@@ -1047,6 +1056,7 @@ public class GameplayScreen : IAccessibleScreen
     {
         _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
+        _shopItemMenu.Exit(announce: false);
         _navigator.SetCombatMode(inCombat);
 
         if (inCombat)
@@ -1113,6 +1123,7 @@ public class GameplayScreen : IAccessibleScreen
     {
         _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
+        _shopItemMenu.Exit(announce: false);
         _navigator.SetReplayMode(inReplayState);
         _navigator.SyncVisualRecapState();
 
