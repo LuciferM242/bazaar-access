@@ -239,7 +239,8 @@ public class RecapNavigator
     {
         if (_currentSection == RecapSection.EnemyStats)
         {
-            if (_enemyStatIndex >= HeroNavigator.HeroStats.Length - 1)
+            int maxIndex = _hero.GetStatCount(Data.Run?.Opponent, includeRank: false) - 1;
+            if (_enemyStatIndex >= maxIndex)
             {
                 AnnounceEnemyStat();
                 return;
@@ -330,7 +331,7 @@ public class RecapNavigator
 
     /// <summary>
     /// Announce current enemy hero stat.
-    /// Uses HeroNavigator.HeroStats array for stat types and GetStatName for display.
+    /// Uses HeroNavigator's dynamic stat mapping for combat/recap stat views.
     /// </summary>
     private void AnnounceEnemyStat()
     {
@@ -341,17 +342,7 @@ public class RecapNavigator
             return;
         }
 
-        var type = HeroNavigator.HeroStats[_enemyStatIndex];
-        string name = _hero.GetStatName(type);
-
-        if (opponent.Attributes.TryGetValue(type, out int value))
-        {
-            TolkWrapper.Speak($"{name}: {value}");
-        }
-        else
-        {
-            TolkWrapper.Speak($"{name}: none");
-        }
+        _hero.AnnounceStat(opponent, _enemyStatIndex, includeRank: false);
     }
 
     /// <summary>

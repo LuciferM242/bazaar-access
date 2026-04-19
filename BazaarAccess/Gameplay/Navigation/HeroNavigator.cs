@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BazaarAccess.Core;
+using BazaarGameClient.Domain.Models;
 using BazaarGameClient.Domain.Models.Cards;
 using BazaarGameShared.Domain.Core.Types;
 using TheBazaar;
@@ -11,6 +12,8 @@ namespace BazaarAccess.Gameplay.Navigation;
 /// </summary>
 public class HeroNavigator
 {
+    private const int ShieldStatIndex = 6;
+
     public static readonly EPlayerAttributeType[] HeroStats = new[]
     {
         EPlayerAttributeType.Health,
@@ -142,9 +145,25 @@ public class HeroNavigator
     /// </summary>
     public int GetStatCount()
     {
+        return GetStatCount(Data.Run?.Player, includeRank: ItemReader.IsRankedMode());
+    }
+
+    public int GetStatCount(Player player, bool includeRank)
+    {
+        return GetStatCountInternal(player, includeRank);
+    }
+
+    private int GetStatCountInternal(Player player, bool includeRank)
+    {
         int count = HeroStats.Length;
-        if (ItemReader.IsRankedMode()) count++;
+        if (SupportsRage(player)) count++;
+        if (includeRank) count++;
         return count;
+    }
+
+    public static bool SupportsRage(Player player)
+    {
+        return (player?.GetAttributeValue(EPlayerAttributeType.RageMax) ?? 0) > 0;
     }
 
     /// <summary>
@@ -274,6 +293,13 @@ public class HeroNavigator
         var level = player.GetAttributeValue(EPlayerAttributeType.Level);
         if (level.HasValue) parts.Add($"Level {level.Value}");
 
+        if (SupportsRage(player))
+        {
+            int rageMax = player.GetAttributeValue(EPlayerAttributeType.RageMax) ?? 0;
+            int rage = player.GetAttributeValue(EPlayerAttributeType.Rage) ?? 0;
+            parts.Add($"Rage {rage} / {rageMax}");
+        }
+
         var shield = player.GetAttributeValue(EPlayerAttributeType.Shield);
         if (shield.HasValue && shield.Value > 0) parts.Add($"Shield {shield.Value}");
 
@@ -285,22 +311,69 @@ public class HeroNavigator
     /// </summary>
     public void AnnounceStat()
     {
-        // Check if this is the rank slot (last slot in ranked mode)
-        if (ItemReader.IsRankedMode() && _statIndex >= HeroStats.Length)
+        var player = Data.Run?.Player;
+        AnnounceStat(
+            player,
+            _statIndex,
+            includeRank: ItemReader.IsRankedMode(),
+            rankText: ItemReader.GetPlayerRank());
+    }
+
+    public void AnnounceStat(Player player, int statIndex, bool includeRank, string rankText = null)
+    {
+        if (player == null) { TolkWrapper.Speak("No hero data"); return; }
+
+        bool isRageStat;
+        bool isRankStat;
+        int baseStatIndex = GetBaseStatIndex(player, statIndex, includeRank, out isRageStat, out isRankStat);
+
+        if (isRankStat)
         {
-            string rank = ItemReader.GetPlayerRank();
-            TolkWrapper.Speak(!string.IsNullOrEmpty(rank) ? $"Rank: {rank}" : "Rank: unranked");
+            TolkWrapper.Speak(!string.IsNullOrEmpty(rankText) ? $"Rank: {rankText}" : "Rank: unranked");
             return;
         }
 
-        var player = Data.Run?.Player;
-        if (player == null) { TolkWrapper.Speak("No hero data"); return; }
+        if (isRageStat)
+        {
+            int rage = player.GetAttributeValue(EPlayerAttributeType.Rage) ?? 0;
+            int rageMax = player.GetAttributeValue(EPlayerAttributeType.RageMax) ?? 0;
+            TolkWrapper.Speak($"Rage: {rage} / {rageMax}");
+            return;
+        }
 
-        var type = HeroStats[_statIndex];
+        var type = HeroStats[baseStatIndex];
         var value = player.GetAttributeValue(type);
         string name = GetStatName(type);
 
         TolkWrapper.Speak(value.HasValue ? $"{name}: {value.Value}" : $"{name}: none");
+    }
+
+    private static int GetBaseStatIndex(Player player, int statIndex, bool includeRank, out bool isRageStat, out bool isRankStat)
+    {
+        isRageStat = false;
+        isRankStat = false;
+
+        bool shouldShowRage = SupportsRage(player);
+        int rankIndex = HeroStats.Length + (shouldShowRage ? 1 : 0);
+
+        if (shouldShowRage && statIndex == ShieldStatIndex)
+        {
+            isRageStat = true;
+            return -1;
+        }
+
+        if (includeRank && statIndex == rankIndex)
+        {
+            isRankStat = true;
+            return -1;
+        }
+
+        if (shouldShowRage && statIndex > ShieldStatIndex)
+        {
+            return statIndex - 1;
+        }
+
+        return statIndex;
     }
 
     /// <summary>
