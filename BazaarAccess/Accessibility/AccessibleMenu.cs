@@ -380,7 +380,7 @@ public enum AccessibleKey
     PrevMessage,    // Comma - Previous message
     // Additional information
     Info,           // I - Property/keyword info for the item
-    Inspect,        // X - more details for current selection, currently combat encounters
+    Inspect,        // X - inspect the current selection when the game supports an inspect-style tooltip
     // Upgrade
     Upgrade,        // Shift+U - Upgrade item at pedestal
     // Board and Stash info

@@ -5,6 +5,7 @@ using BazaarAccess.Accessibility;
 using BazaarAccess.Core;
 using BazaarAccess.Patches;
 using BazaarAccess.Gameplay.CombatEncounterPreview;
+using BazaarAccess.Gameplay.ItemInspect;
 using BazaarAccess.UI;
 using BazaarGameClient.Domain.Models.Cards;
 using BazaarGameShared.Domain.Core.Types;
@@ -29,21 +30,29 @@ public class GameplayScreen : IAccessibleScreen
     private readonly CombatInputHandler _combatHandler;
     private readonly ReplayInputHandler _replayHandler;
     private readonly CombatEncounterPreviewNavigator _combatEncounterPreview;
+    private readonly ItemInspectNavigator _itemInspect;
     private bool _isValid = true;
     private ERunState _lastState = ERunState.Choice;
 
     public GameplayScreen()
     {
         _navigator = new GameplayNavigator();
-        _actionMenu = new ActionMenuHandler(_navigator, HandleUpgradeConfirm, RefreshAndAnnounce);
+        _actionMenu = new ActionMenuHandler(_navigator, HandleUpgradeConfirm, RefreshAndAnnounce, TryStartItemInspect);
         _combatHandler = new CombatInputHandler(_navigator);
         _replayHandler = new ReplayInputHandler(_navigator, TriggerReplayContinue, TriggerReplayReplay, TriggerReplayRecap, TriggerReplayRecapBack);
         _combatEncounterPreview = new CombatEncounterPreviewNavigator();
+        _itemInspect = new ItemInspectNavigator();
     }
 
     public void HandleInput(AccessibleKey key)
     {
         _navigator.SyncVisualRecapState();
+
+        if (_itemInspect.IsActive)
+        {
+            _itemInspect.HandleInput(key);
+            return;
+        }
 
         if (_combatEncounterPreview.IsActive)
         {
@@ -403,6 +412,7 @@ public class GameplayScreen : IAccessibleScreen
 
     public void OnFocus()
     {
+        _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
         _lastState = StateChangePatch.GetCurrentRunState();
         _navigator.Refresh();
@@ -426,6 +436,7 @@ public class GameplayScreen : IAccessibleScreen
     /// <param name="stateActuallyChanged">True si el estado realmente cambió (calculado por StateChangePatch)</param>
     public void OnStateChanged(ERunState newState, bool stateActuallyChanged = true)
     {
+        _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
         _lastState = newState;
 
@@ -602,6 +613,12 @@ public class GameplayScreen : IAccessibleScreen
     private void HandleInspect()
     {
         var card = _navigator.GetCurrentCard();
+        if (card is ItemCard)
+        {
+            TryStartItemInspect(card);
+            return;
+        }
+
         if (card?.Type != ECardType.CombatEncounter)
         {
             TolkWrapper.Speak("Nothing to inspect");
@@ -613,6 +630,15 @@ public class GameplayScreen : IAccessibleScreen
             Plugin.Instance.StartCoroutine(_combatEncounterPreview.ShowVisualPreview());
             Plugin.Instance.StartCoroutine(_combatEncounterPreview.MonitorVisualState());
         }
+    }
+
+    private void TryStartItemInspect(Card card)
+    {
+        if (!_itemInspect.TryEnter(card))
+            return;
+
+        Plugin.Instance.StartCoroutine(_itemInspect.ShowVisualPreview());
+        Plugin.Instance.StartCoroutine(_itemInspect.MonitorVisualState());
     }
 
     private void HandleCardConfirm(Card card)
@@ -1167,6 +1193,7 @@ public class GameplayScreen : IAccessibleScreen
     /// </summary>
     public void OnCombatStateChanged(bool inCombat)
     {
+        _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
         _navigator.SetCombatMode(inCombat);
 
@@ -1232,6 +1259,7 @@ public class GameplayScreen : IAccessibleScreen
     /// </summary>
     public void OnReplayStateChanged(bool inReplayState)
     {
+        _itemInspect.Exit();
         _combatEncounterPreview.Exit(announce: false);
         _navigator.SetReplayMode(inReplayState);
         _navigator.SyncVisualRecapState();
