@@ -62,8 +62,8 @@ public class ConfirmActionUI : IAccessibleUI
     {
         switch (key)
         {
-            case AccessibleKey.Left:
-            case AccessibleKey.Right:
+            case AccessibleKey.Up:
+            case AccessibleKey.Down:
                 // Cambiar entre Confirm y Cancel
                 _selectedOption = (_selectedOption + 1) % 2;
                 AnnounceCurrentOption();
@@ -101,7 +101,7 @@ public class ConfirmActionUI : IAccessibleUI
 
     public string GetHelp()
     {
-        return "Left/Right: switch option. Enter: confirm. Escape: cancel.";
+        return "Up/Down: switch option. Enter: confirm. Escape: cancel.";
     }
 
     public void OnFocus()
