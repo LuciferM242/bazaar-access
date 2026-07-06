@@ -9,9 +9,13 @@ namespace BazaarAccess.Patches;
 /// <summary>
 /// Hook en FightMenuDialog para hacer accesible el menú de pausa durante el gameplay.
 /// </summary>
-[HarmonyPatch(typeof(FightMenuDialog), "ShowDialogs")]
+[HarmonyPatch]
 public static class FightMenuShowPatch
 {
+    // FightMenuDialog is internal in the game assembly, so resolve it by name.
+    static MethodBase TargetMethod() =>
+        AccessTools.Method(AccessTools.TypeByName("FightMenuDialog"), "ShowDialogs");
+
     private static FightMenuUI _currentUI;
     private static bool _isOpen = false;
     private static float _lastCloseTime = 0f;
@@ -68,9 +72,12 @@ public static class FightMenuShowPatch
     public static FightMenuUI GetCurrentUI() => _currentUI;
 }
 
-[HarmonyPatch(typeof(FightMenuDialog), "HideDialogs")]
+[HarmonyPatch]
 public static class FightMenuHidePatch
 {
+    static MethodBase TargetMethod() =>
+        AccessTools.Method(AccessTools.TypeByName("FightMenuDialog"), "HideDialogs");
+
     [HarmonyPostfix]
     public static void Postfix()
     {
@@ -101,9 +108,12 @@ public static class FightMenuHidePatch
 /// <summary>
 /// Hook para cuando se abre Options desde el menú de pausa.
 /// </summary>
-[HarmonyPatch(typeof(FightMenuDialog), "OnOptionsClick")]
+[HarmonyPatch]
 public static class FightMenuOptionsClickPatch
 {
+    static MethodBase TargetMethod() =>
+        AccessTools.Method(AccessTools.TypeByName("FightMenuDialog"), "OnOptionsClick");
+
     [HarmonyPostfix]
     public static void Postfix(MonoBehaviour __instance)
     {
@@ -159,9 +169,12 @@ public static class FightMenuOptionsClickPatch
 /// Hook para cuando se cierra Options.
 /// Escape cierra todo el sistema de pausa, así que solo limpiamos OptionsUI.
 /// </summary>
-[HarmonyPatch(typeof(FightMenuDialog), "OnOptionsClosed")]
+[HarmonyPatch]
 public static class FightMenuOptionsClosedPatch
 {
+    static MethodBase TargetMethod() =>
+        AccessTools.Method(AccessTools.TypeByName("FightMenuDialog"), "OnOptionsClosed");
+
     [HarmonyPostfix]
     public static void Postfix(MonoBehaviour __instance)
     {
