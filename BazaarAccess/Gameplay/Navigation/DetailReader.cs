@@ -42,7 +42,6 @@ namespace BazaarAccess.Gameplay.Navigation
             if (card == null) return;
 
             _lines = getDetailLines(card);
-            _lines.Reverse();
         }
 
         /// <summary>
